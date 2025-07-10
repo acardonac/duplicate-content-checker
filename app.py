@@ -51,71 +51,86 @@ def extract_urls_from_sitemap(sitemap_url, limit=5):
         return []
 
 # --- Streamlit App ---
-st.title("🔍 Duplicate Content Checker")
+st.set_page_config(page_title="Duplicate Content Checker", layout="wide")
+st.sidebar.title("🔍 Duplicate Content Checker")
+st.sidebar.write("Compare content across webpages and export duplicate findings.")
 
-st.write("You can enter a sitemap URL or manually input individual URLs to compare their content.")
+page = st.sidebar.radio("Navigate", ["Input & Analysis", "📊 Report Viewer"])
 
-use_sitemap = st.checkbox("Use Sitemap.xml to load URLs")
-urls = []
+if page == "Input & Analysis":
+    use_sitemap = st.checkbox("Use Sitemap.xml to load URLs")
+    urls = []
 
-if use_sitemap:
-    sitemap_url = st.text_input("Sitemap URL")
-    if sitemap_url:
-        urls = extract_urls_from_sitemap(sitemap_url)
-        st.success(f"Loaded {len(urls)} URLs from sitemap.")
-else:
-    url_inputs = [st.text_input(f"URL {i+1}") for i in range(5)]
-    urls = [url for url in url_inputs if url]
-
-if st.button("Compare Content"):
-    if len(urls) < 2:
-        st.warning("Please enter at least two URLs.")
+    if use_sitemap:
+        sitemap_url = st.text_input("Sitemap URL")
+        if sitemap_url:
+            urls = extract_urls_from_sitemap(sitemap_url)
+            st.success(f"Loaded {len(urls)} URLs from sitemap.")
     else:
-        with st.spinner("Fetching and comparing content..."):
-            texts = [fetch_content(url) for url in urls]
-            similarity_matrix = compare_texts(texts)
-            df = pd.DataFrame(similarity_matrix, index=urls, columns=urls)
+        url_inputs = [st.text_input(f"URL {i+1}") for i in range(5)]
+        urls = [url for url in url_inputs if url]
 
-        st.subheader("🔗 Similarity Matrix")
-        st.dataframe(df.style.background_gradient(cmap='YlOrRd'))
+    if st.button("Compare Content"):
+        if len(urls) < 2:
+            st.warning("Please enter at least two URLs.")
+        else:
+            with st.spinner("Fetching and comparing content..."):
+                texts = [fetch_content(url) for url in urls]
+                similarity_matrix = compare_texts(texts)
+                df = pd.DataFrame(similarity_matrix, index=urls, columns=urls)
 
-        st.subheader(f"🧬 All Pair Comparisons with Duplicated Phrases")
+            st.subheader("🔗 Similarity Matrix")
+            st.dataframe(df.style.background_gradient(cmap='YlOrRd'))
 
-        # Collect data for export
-        export_rows = []
+            st.session_state['comparison_results'] = []
 
-        for i in range(len(urls)):
-            for j in range(i + 1, len(urls)):
-                sim_score = similarity_matrix[i][j]
-                st.markdown(f"**{urls[i]} ↔ {urls[j]} (Score: {round(sim_score, 4)})**")
-                diff_html = highlight_diff(texts[i], texts[j])
-                st.components.v1.html(diff_html, height=400, scrolling=True)
+            for i in range(len(urls)):
+                for j in range(i + 1, len(urls)):
+                    sim_score = similarity_matrix[i][j]
+                    diff_html = highlight_diff(texts[i], texts[j])
+                    seq_matcher = difflib.SequenceMatcher(None, texts[i], texts[j])
+                    matching_blocks = seq_matcher.get_matching_blocks()
+                    matched_content = [texts[i][block.a:block.a + block.size] for block in matching_blocks if block.size > 30]
+                    matched_text = "\n\n".join([f"...{chunk.strip()}..." for chunk in matched_content if chunk.strip()])
 
-                # Find overlapping phrases
-                seq_matcher = difflib.SequenceMatcher(None, texts[i], texts[j])
-                matching_blocks = seq_matcher.get_matching_blocks()
-                matched_content = [texts[i][block.a:block.a + block.size] for block in matching_blocks if block.size > 30]
-                matched_text = "\n\n".join([f"...{chunk.strip()}..." for chunk in matched_content if chunk.strip()])
+                    st.session_state['comparison_results'].append({
+                        "URL 1": urls[i],
+                        "URL 2": urls[j],
+                        "Similarity Score": round(sim_score, 4),
+                        "Highlighted Duplicate Phrases": matched_text,
+                        "Diff HTML": diff_html
+                    })
 
-                export_rows.append({
-                    "URL 1": urls[i],
-                    "URL 2": urls[j],
-                    "Similarity Score": round(sim_score, 4),
-                    "Highlighted Duplicate Phrases": matched_text
-                })
+            st.success("✅ Content comparison complete. View the results in the Report Viewer tab.")
 
-        # Export button
-        if export_rows:
-            export_df = pd.DataFrame(export_rows)
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                export_df.to_excel(writer, index=False, sheet_name='Duplicates')
-            st.download_button(
-                label="📥 Download Duplicates Excel Report",
-                data=buffer.getvalue(),
-                file_name="duplicate_content_report.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+elif page == "📊 Report Viewer":
+    if 'comparison_results' in st.session_state and st.session_state['comparison_results']:
+        st.header("📊 Comparison Report")
+        for result in st.session_state['comparison_results']:
+            with st.expander(f"{result['URL 1']} ↔ {result['URL 2']} (Score: {result['Similarity Score']})"):
+                st.markdown("### Highlighted Duplicate Phrases")
+                st.code(result['Highlighted Duplicate Phrases'], language='text')
+                st.markdown("### Side-by-Side Diff Viewer")
+                st.components.v1.html(result['Diff HTML'], height=400, scrolling=True)
+
+        export_df = pd.DataFrame([{
+            "URL 1": r["URL 1"],
+            "URL 2": r["URL 2"],
+            "Similarity Score": r["Similarity Score"],
+            "Highlighted Duplicate Phrases": r["Highlighted Duplicate Phrases"]
+        } for r in st.session_state['comparison_results']])
+
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            export_df.to_excel(writer, index=False, sheet_name='Duplicates')
+        st.download_button(
+            label="📥 Download Duplicates Excel Report",
+            data=buffer.getvalue(),
+            file_name="duplicate_content_report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+    else:
+        st.info("No comparison results available yet. Go to 'Input & Analysis' to start.")
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit and NLP. Coming soon: multilingual support + AI paraphrase detection!")
