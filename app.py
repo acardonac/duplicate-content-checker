@@ -9,6 +9,8 @@ import re
 import pandas as pd
 import xml.etree.ElementTree as ET
 import io
+from collections import defaultdict
+from sklearn.feature_extraction.text import CountVectorizer
 
 # --- Helper Functions ---
 def clean_text(html):
@@ -75,6 +77,15 @@ def extract_urls_from_sitemap(sitemap_url, limit=5):
     except Exception as e:
         return []
 
+def detect_keyword_cannibalization(texts, urls, top_n=10):
+    vectorizer = CountVectorizer(stop_words='english')
+    X = vectorizer.fit_transform(texts)
+    keyword_matrix = X.toarray().T
+    keywords = vectorizer.get_feature_names_out()
+    keyword_df = pd.DataFrame(keyword_matrix, index=keywords, columns=urls)
+    cannibalization = keyword_df[(keyword_df > 0).sum(axis=1) > 1]
+    return cannibalization.sort_values(by=list(cannibalization.columns), ascending=False).head(top_n)
+
 # --- Streamlit App ---
 st.set_page_config(page_title="Duplicate Content Checker", layout="wide")
 st.sidebar.title("🔍 Duplicate Content Checker")
@@ -128,6 +139,14 @@ if page == "Input & Analysis":
 
             st.success("✅ Content comparison complete. View the results in the Report Viewer tab.")
 
+            # Keyword Cannibalization
+            st.subheader("🔁 Keyword Cannibalization Report")
+            keyword_df = detect_keyword_cannibalization(texts, urls)
+            if not keyword_df.empty:
+                st.dataframe(keyword_df)
+            else:
+                st.info("No significant keyword cannibalization detected.")
+
 elif page == "📊 Report Viewer":
     if 'comparison_results' in st.session_state and st.session_state['comparison_results']:
         st.header("📊 Comparison Report")
@@ -158,4 +177,4 @@ elif page == "📊 Report Viewer":
         st.info("No comparison results available yet. Go to 'Input & Analysis' to start.")
 
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit and NLP. Coming soon: multilingual support + AI paraphrase detection!")
+st.caption("Built with ❤️ using Streamlit and NLP. Now includes keyword cannibalization detection!")
