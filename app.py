@@ -35,8 +35,33 @@ def compare_texts(texts):
     return similarity
 
 def highlight_diff(text1, text2):
-    d = difflib.HtmlDiff()
-    return d.make_table(text1.split(), text2.split(), context=True, numlines=2)
+    d = difflib.HtmlDiff(wrapcolumn=80)
+    html_table = d.make_table(text1.split(), text2.split(), context=True, numlines=2)
+    styled_html = f"""
+    <style>
+    table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+    }}
+    th, td {{
+        padding: 8px;
+        text-align: left;
+        border: 1px solid #ccc;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }}
+    tr:nth-child(even) {{
+        background-color: #f9f9f9;
+    }}
+    .diff_add {{ background-color: #d4f7dc; }}
+    .diff_chg {{ background-color: #fff3cd; }}
+    .diff_sub {{ background-color: #f8d7da; }}
+    </style>
+    {html_table}
+    """
+    return styled_html
 
 def extract_urls_from_sitemap(sitemap_url, limit=5):
     try:
@@ -111,7 +136,7 @@ elif page == "📊 Report Viewer":
                 st.markdown("### Highlighted Duplicate Phrases")
                 st.code(result['Highlighted Duplicate Phrases'], language='text')
                 st.markdown("### Side-by-Side Diff Viewer")
-                st.components.v1.html(result['Diff HTML'], height=400, scrolling=True)
+                st.components.v1.html(result['Diff HTML'], height=500, scrolling=True)
 
         export_df = pd.DataFrame([{
             "URL 1": r["URL 1"],
