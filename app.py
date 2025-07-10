@@ -8,6 +8,7 @@ import difflib
 import re
 import pandas as pd
 import xml.etree.ElementTree as ET
+import io
 
 # --- Helper Functions ---
 def clean_text(html):
@@ -80,6 +81,10 @@ if st.button("Compare Content"):
 
         threshold = 0.8
         st.subheader(f"🧬 Pairs with Similarity > {threshold}")
+
+        # Collect data for export
+        export_rows = []
+
         for i in range(len(urls)):
             for j in range(i + 1, len(urls)):
                 sim_score = similarity_matrix[i][j]
@@ -87,6 +92,31 @@ if st.button("Compare Content"):
                     st.markdown(f"**{urls[i]} ↔ {urls[j]}**")
                     diff_html = highlight_diff(texts[i], texts[j])
                     st.components.v1.html(diff_html, height=400, scrolling=True)
+
+                    # Find overlapping phrases
+                    seq_matcher = difflib.SequenceMatcher(None, texts[i], texts[j])
+                    matching_blocks = seq_matcher.get_matching_blocks()
+                    matched_content = " ".join([texts[i][block.a:block.a + block.size] for block in matching_blocks if block.size > 50])
+
+                    export_rows.append({
+                        "URL 1": urls[i],
+                        "URL 2": urls[j],
+                        "Similarity Score": round(sim_score, 4),
+                        "Duplicated Content": matched_content
+                    })
+
+        # Export button
+        if export_rows:
+            export_df = pd.DataFrame(export_rows)
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                export_df.to_excel(writer, index=False, sheet_name='Duplicates')
+            st.download_button(
+                label="📥 Download Duplicates Excel Report",
+                data=buffer.getvalue(),
+                file_name="duplicate_content_report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit and NLP")
