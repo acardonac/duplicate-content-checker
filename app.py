@@ -79,8 +79,7 @@ if st.button("Compare Content"):
         st.subheader("🔗 Similarity Matrix")
         st.dataframe(df.style.background_gradient(cmap='YlOrRd'))
 
-        threshold = 0.8
-        st.subheader(f"🧬 Pairs with Similarity > {threshold}")
+        st.subheader(f"🧬 All Pair Comparisons with Duplicated Phrases")
 
         # Collect data for export
         export_rows = []
@@ -88,22 +87,22 @@ if st.button("Compare Content"):
         for i in range(len(urls)):
             for j in range(i + 1, len(urls)):
                 sim_score = similarity_matrix[i][j]
-                if sim_score >= threshold:
-                    st.markdown(f"**{urls[i]} ↔ {urls[j]}**")
-                    diff_html = highlight_diff(texts[i], texts[j])
-                    st.components.v1.html(diff_html, height=400, scrolling=True)
+                st.markdown(f"**{urls[i]} ↔ {urls[j]} (Score: {round(sim_score, 4)})**")
+                diff_html = highlight_diff(texts[i], texts[j])
+                st.components.v1.html(diff_html, height=400, scrolling=True)
 
-                    # Find overlapping phrases
-                    seq_matcher = difflib.SequenceMatcher(None, texts[i], texts[j])
-                    matching_blocks = seq_matcher.get_matching_blocks()
-                    matched_content = " ".join([texts[i][block.a:block.a + block.size] for block in matching_blocks if block.size > 50])
+                # Find overlapping phrases
+                seq_matcher = difflib.SequenceMatcher(None, texts[i], texts[j])
+                matching_blocks = seq_matcher.get_matching_blocks()
+                matched_content = [texts[i][block.a:block.a + block.size] for block in matching_blocks if block.size > 30]
+                matched_text = "\n\n".join([f"...{chunk.strip()}..." for chunk in matched_content if chunk.strip()])
 
-                    export_rows.append({
-                        "URL 1": urls[i],
-                        "URL 2": urls[j],
-                        "Similarity Score": round(sim_score, 4),
-                        "Duplicated Content": matched_content
-                    })
+                export_rows.append({
+                    "URL 1": urls[i],
+                    "URL 2": urls[j],
+                    "Similarity Score": round(sim_score, 4),
+                    "Highlighted Duplicate Phrases": matched_text
+                })
 
         # Export button
         if export_rows:
@@ -119,4 +118,4 @@ if st.button("Compare Content"):
             )
 
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit and NLP")
+st.caption("Built with ❤️ using Streamlit and NLP. Coming soon: multilingual support + AI paraphrase detection!")
